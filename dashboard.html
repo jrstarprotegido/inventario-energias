@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f172a">
+<title>Dashboard Consolidado · Energías Peligrosas LOTO/HRN</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  .dropzone.drag { border-color:#6366f1; background:#eef2ff; }
+  @media print {
+    @page { size:A4 landscape; margin:10mm; }
+    .no-print{ display:none !important; }
+    body{ background:#fff !important; }
+    .print-block{ break-inside:avoid; box-shadow:none !important; border:1px solid #cbd5e1; }
+    canvas{ max-height:260px !important; }
+  }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900 min-h-screen">
+
+<!-- HEADER -->
+<header class="sticky top-0 z-30 bg-slate-900 text-white shadow-lg">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-2 min-w-0">
+      <span class="text-2xl">📊</span>
+      <div class="min-w-0">
+        <h1 class="text-base sm:text-lg font-bold leading-tight truncate">Dashboard Consolidado · Energías Peligrosas</h1>
+        <p class="text-[11px] text-slate-300 leading-tight">Levantamiento LOTO · Valoración HRN · Multi-planta</p>
+      </div>
+    </div>
+    <a href="index.html" class="no-print text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-2 whitespace-nowrap">⚡ App de campo</a>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-3 sm:px-4 py-4 pb-24">
+
+  <!-- CARGA DE DATOS -->
+  <section class="no-print bg-white rounded-2xl shadow-sm p-4 mb-4">
+    <div id="dropzone" class="dropzone border-2 border-dashed border-slate-300 rounded-xl p-5 text-center transition cursor-pointer">
+      <div class="text-3xl mb-1">📂⬆️</div>
+      <p class="text-sm font-semibold text-slate-700">Carga los inventarios (.json)</p>
+      <p class="text-xs text-slate-400">Arrastra archivos individuales <b>o un JSON consolidado</b>. Se unen y deduplican automáticamente.</p>
+      <input id="filePick" type="file" accept="application/json,.json" multiple class="hidden">
+    </div>
+    <div class="mt-3 flex flex-wrap items-center gap-2 justify-between">
+      <div id="loadInfo" class="text-xs text-slate-500">Sin inventarios cargados.</div>
+      <div class="flex flex-wrap gap-2">
+        <button id="btnExportJson" class="bg-amber-600 text-white text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition">⬇️ JSON consolidado</button>
+        <button id="btnExcel" class="bg-green-700 text-white text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition">📊 Excel consolidado</button>
+        <button id="btnPrint" class="bg-blue-600 text-white text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition">🖨️ PDF</button>
+        <button id="btnClear" class="bg-slate-200 text-slate-700 text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition">🗑️ Vaciar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- FILTROS -->
+  <section class="no-print bg-white rounded-2xl shadow-sm p-4 mb-4">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <label class="block"><span class="text-[11px] font-semibold text-slate-500">Planta</span>
+        <select id="fPlanta" class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"></select></label>
+      <label class="block"><span class="text-[11px] font-semibold text-slate-500">Área</span>
+        <select id="fArea" class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"></select></label>
+      <label class="block"><span class="text-[11px] font-semibold text-slate-500">Tipo de Energía</span>
+        <select id="fEnergia" class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"></select></label>
+      <label class="block"><span class="text-[11px] font-semibold text-slate-500">Nivel de Riesgo</span>
+        <select id="fNivel" class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"></select></label>
+    </div>
+  </section>
+
+  <!-- ESTADO VACÍO -->
+  <div id="emptyState" class="text-center text-slate-400 py-16">
+    <div class="text-5xl mb-2">🏭📈</div>
+    <p class="text-sm">Aún no hay datos consolidados.</p>
+    <p class="text-xs">Carga los archivos JSON que exporten los profesionales en cada planta.</p>
+  </div>
+
+  <div id="board" class="hidden space-y-4">
+
+    <!-- KPIs -->
+    <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+      <div class="bg-white rounded-xl shadow-sm p-3 text-center print-block"><div id="kPlantas" class="text-2xl font-bold text-slate-800">0</div><div class="text-[10px] uppercase font-semibold text-slate-400">Plantas</div></div>
+      <div class="bg-white rounded-xl shadow-sm p-3 text-center print-block"><div id="kEquipos" class="text-2xl font-bold text-slate-800">0</div><div class="text-[10px] uppercase font-semibold text-slate-400">Equipos</div></div>
+      <div class="bg-white rounded-xl shadow-sm p-3 text-center print-block"><div id="kEval" class="text-2xl font-bold text-slate-800">0</div><div class="text-[10px] uppercase font-semibold text-slate-400">Evaluaciones</div></div>
+      <div class="bg-white rounded-xl shadow-sm p-3 text-center print-block"><div id="kCump" class="text-2xl font-bold text-emerald-600">0%</div><div class="text-[10px] uppercase font-semibold text-slate-400">Cumplimiento</div></div>
+      <div class="bg-white rounded-xl shadow-sm p-3 text-center print-block"><div id="kNC" class="text-2xl font-bold text-red-600">0</div><div class="text-[10px] uppercase font-semibold text-slate-400">No Cumple</div></div>
+      <div class="bg-white rounded-xl shadow-sm p-3 text-center print-block"><div id="kInac" class="text-2xl font-bold text-orange-600">0</div><div class="text-[10px] uppercase font-semibold text-slate-400">Inaceptable+Alto</div></div>
+    </section>
+
+    <!-- VISTA 1: MAPA DE RIESGO HRN -->
+    <section class="bg-white rounded-2xl shadow-sm p-4 print-block">
+      <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">① Mapa de Riesgo HRN</h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
+        <div class="grid grid-cols-2 gap-2">
+          <div class="rounded-xl p-3 text-white" style="background:#16a34a"><div id="rIns" class="text-2xl font-bold">0</div><div class="text-[11px] font-semibold">Insignificante (0–5)</div></div>
+          <div class="rounded-xl p-3 text-black" style="background:#facc15"><div id="rBajo" class="text-2xl font-bold">0</div><div class="text-[11px] font-semibold">Bajo/Significativo (5–50)</div></div>
+          <div class="rounded-xl p-3 text-white" style="background:#f97316"><div id="rAlto" class="text-2xl font-bold">0</div><div class="text-[11px] font-semibold">Alto (50–500)</div></div>
+          <div class="rounded-xl p-3 text-white" style="background:#dc2626"><div id="rInac" class="text-2xl font-bold">0</div><div class="text-[11px] font-semibold">Inaceptable (500+)</div></div>
+        </div>
+        <div class="h-56"><canvas id="chartRiesgo"></canvas></div>
+      </div>
+      <h3 class="text-xs font-bold text-slate-500 uppercase mt-4 mb-2">Top equipos por riesgo (HRN máx)</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm"><thead><tr class="text-left text-slate-400 border-b">
+          <th class="py-1 pr-2">Planta</th><th class="py-1 pr-2">Equipo</th><th class="py-1 pr-2">Energía</th><th class="py-1 pr-2 text-right">HRN máx</th><th class="py-1 pl-2">Nivel</th></tr></thead>
+          <tbody id="tblTop"></tbody></table>
+      </div>
+    </section>
+
+    <!-- VISTA 2: CUMPLIMIENTO -->
+    <section class="bg-white rounded-2xl shadow-sm p-4 print-block">
+      <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">② Cumplimiento C / NC / NA</h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="h-64"><canvas id="chartCumpEnergia"></canvas></div>
+        <div class="h-64"><canvas id="chartCumpPlanta"></canvas></div>
+      </div>
+    </section>
+
+    <!-- VISTA 3: POR ENERGÍA -->
+    <section class="bg-white rounded-2xl shadow-sm p-4 print-block">
+      <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">③ Hallazgos por Tipo de Energía</h2>
+      <div class="h-64"><canvas id="chartEnergia"></canvas></div>
+    </section>
+
+    <!-- VISTA 4: PLAN DE ACCIÓN -->
+    <section class="bg-white rounded-2xl shadow-sm p-4 print-block">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wide">④ Plan de Acción (No Cumple / hallazgos críticos)</h2>
+        <label class="no-print text-xs flex items-center gap-1 text-slate-500"><input id="onlyNC" type="checkbox" class="rounded"> Solo No Cumple</label>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs"><thead><tr class="text-left text-slate-400 border-b align-bottom">
+          <th class="py-1 pr-2">Planta</th><th class="py-1 pr-2">Área</th><th class="py-1 pr-2">Equipo</th>
+          <th class="py-1 pr-2">Energía</th><th class="py-1 pr-2">Hallazgo</th><th class="py-1 pr-2">Recomendación</th>
+          <th class="py-1 pr-2">Nivel</th><th class="py-1 pr-2">Punto Aislamiento</th><th class="py-1 pr-2">Responsable</th></tr></thead>
+          <tbody id="tblPlan"></tbody></table>
+      </div>
+      <div id="planEmpty" class="text-center text-slate-400 text-sm py-6 hidden">Sin hallazgos para los filtros actuales.</div>
+    </section>
+
+  </div>
+</main>
+
+<script>
+/* ===== Niveles HRN (idénticos a la app de campo) ===== */
+function nivelRiesgo(h){
+  if (h==null || h<=0) return null;
+  if (h<=5)   return { key:'ins',  txt:"Insignificante",           bg:"#16a34a", fg:"#fff" };
+  if (h<=50)  return { key:'bajo', txt:"Bajo, pero significativo", bg:"#facc15", fg:"#000" };
+  if (h<=500) return { key:'alto', txt:"Alto",                     bg:"#f97316", fg:"#fff" };
+  return            { key:'inac', txt:"Inaceptable",               bg:"#dc2626", fg:"#fff" };
+}
+const ENERGY_COLORS = {
+  "ELÉCTRICA":"#FF0000","NEUMÁTICA":"#00B0F0","MECÁNICA":"#FFC000",
+  "HIDRÁULICA (ACEITE)":"#833C0C","HIDRÁULICA (AGUA)":"#00B050","TÉRMICA":"#7030A0",
+  "VAPOR":"#A6A6A6","GAS NATURAL":"#FFFF00","QUÍMICO":"#16A085"
+};
+
+/* ===== Estado / persistencia ===== */
+const LS_KEY = "dashboard_energias_consolidado_v1";
+let inventories = [];   // [{id, planta, area, maquina, evaluador, fecha, evals:[...] }]
+let charts = {};
+
+function loadStore(){
+  try { const raw = localStorage.getItem(LS_KEY); if (raw) inventories = JSON.parse(raw); }
+  catch(e){ console.warn(e); inventories = []; }
+}
+function saveStore(){
+  try { localStorage.setItem(LS_KEY, JSON.stringify(inventories)); }
+  catch(e){ alert("No se pudo guardar en este navegador (espacio): " + e.message); }
+}
+
+/* ===== Normalizar un JSON exportado a un inventario ===== */
+function parseInventory(data){
+  const g = data.general || {};
+  const evalsRaw = Array.isArray(data.evaluaciones) ? data.evaluaciones
+                 : Array.isArray(data.items) ? data.items : null;
+  if (!evalsRaw) throw new Error("Formato no reconocido (sin 'evaluaciones').");
+  const id = (data.meta && data.meta.id) || g.invId ||
+             [g.planta,g.area,g.maquina,g.evaluador,g.fecha].join('|') || ('inv_'+Math.random().toString(36).slice(2));
+  const evals = evalsRaw.map(ev=>{
+    // soporta formato export (energia,...) y formato crudo (energy,...)
+    const energia = ev.energia ?? ev.energy ?? "";
+    const hrnObj = (ev.hrn && typeof ev.hrn === 'object') ? ev.hrn : {};
+    const hrn = (typeof ev.hrn === 'number') ? ev.hrn : (hrnObj.total ?? ev.hrnTotal ?? null);
+    const num = v => (v==null||v==="") ? null : Number(v);
+    return {
+      energia,
+      criterio: ev.criterio ?? "",
+      hallazgo: ev.hallazgo ?? "",
+      recomendacion: ev.recomendacion ?? ev.reco ?? "",
+      calif: ev.calificacion ?? ev.calif ?? "",
+      punto: ev.puntoAislamiento ?? ev.punto ?? "",
+      metodo: ev.metodoBloqueo ?? ev.metodo ?? "",
+      resp: ev.responsable ?? ev.resp ?? "",
+      fe: num(hrnObj.FE ?? ev.fe), po: num(hrnObj.PO ?? ev.po),
+      gs: num(hrnObj.GS ?? ev.gs), np: num(hrnObj.NP ?? ev.np),
+      hrn: (hrn==null||hrn==="") ? null : Number(hrn)
+    };
+  });
+  return {
+    id,
+    planta: g.planta || "(Sin planta)",
+    area: g.area || "(Sin área)",
+    maquina: g.maquina || "(Sin equipo)",
+    evaluador: g.evaluador || "",
+    fecha: g.fecha || "",
+    cargado: new Date().toISOString(),
+    evals
+  };
+}
+
+/* Convierte un objeto a inventario interno: acepta formato interno (con evals),
+   formato exportado de la app (general/evaluaciones) o crudo (items). */
+function toInventory(obj){
+  if (Array.isArray(obj.evals)){
+    return {
+      id: obj.id || ('inv_'+Math.random().toString(36).slice(2)),
+      planta: obj.planta || "(Sin planta)", area: obj.area || "(Sin área)",
+      maquina: obj.maquina || "(Sin equipo)", evaluador: obj.evaluador || "", fecha: obj.fecha || "",
+      cargado: obj.cargado || new Date().toISOString(),
+      evals: obj.evals
+    };
+  }
+  return parseInventory(obj);
+}
+
+function mergeInv(inv){
+  const idx = inventories.findIndex(x=>x.id===inv.id);
+  if (idx>=0){ inventories[idx]=inv; return 'upd'; }
+  inventories.push(inv); return 'add';
+}
+
+function addFiles(fileList){
+  const files = Array.from(fileList).filter(f=>/\.json$/i.test(f.name) || f.type==="application/json");
+  if (!files.length){ alert("Selecciona archivos .json válidos."); return; }
+  let added=0, updated=0, errors=0; let pending=files.length;
+  files.forEach(file=>{
+    const r = new FileReader();
+    r.onload = e=>{
+      try{
+        const data = JSON.parse(e.target.result);
+        // ¿Es un consolidado (varios inventarios) o un inventario individual?
+        const list = Array.isArray(data.inventories) ? data.inventories.map(toInventory)
+                   : [parseInventory(data)];
+        list.forEach(inv=>{ (mergeInv(inv)==='add') ? added++ : updated++; });
+      }catch(err){ console.error(file.name, err); errors++; }
+      if (--pending===0) finish();
+    };
+    r.onerror = ()=>{ errors++; if(--pending===0) finish(); };
+    r.readAsText(file);
+  });
+  function finish(){
+    saveStore(); buildFilters(); render();
+    let msg = `${added} agregado(s)`;
+    if (updated) msg += `, ${updated} actualizado(s)`;
+    if (errors) msg += `, ${errors} con error`;
+    flash(msg);
+  }
+}
+
+/* Descargar todo el consolidado en un solo JSON (respaldo / re-visualización) */
+function exportConsolidatedJSON(){
+  if (!inventories.length){ alert("No hay inventarios cargados para descargar."); return; }
+  const payload = {
+    meta: { app:"Dashboard Energías Peligrosas", type:"consolidado", version:1,
+            exportado:new Date().toISOString(), inventarios:inventories.length,
+            evaluaciones: flatten(inventories,{}).length },
+    inventories
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href = url; a.download = `Consolidado_Energias_${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(url);
+  flash("JSON consolidado descargado ✓");
+}
+
+/* ===== Filtros ===== */
+const F = {planta:"", area:"", energia:"", nivel:""};
+function uniqueSorted(arr){ return [...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')); }
+function buildFilters(){
+  const flat = flatten(inventories, {});
+  fill('fPlanta', uniqueSorted(flat.map(r=>r.planta)), "Todas");
+  fill('fArea',   uniqueSorted(flat.map(r=>r.area)),   "Todas");
+  fill('fEnergia',uniqueSorted(flat.map(r=>r.energia)),"Todas");
+  const nivOpts = [["","Todos"],["ins","Insignificante"],["bajo","Bajo/Significativo"],["alto","Alto"],["inac","Inaceptable"]];
+  const sel = document.getElementById('fNivel'); const cur = sel.value;
+  sel.innerHTML=""; nivOpts.forEach(([v,t])=>{ const o=document.createElement('option'); o.value=v; o.textContent=t; sel.appendChild(o);});
+  sel.value = cur;
+}
+function fill(id, opts, allLabel){
+  const sel = document.getElementById(id); const cur = sel.value;
+  sel.innerHTML="";
+  const o0=document.createElement('option'); o0.value=""; o0.textContent=allLabel; sel.appendChild(o0);
+  opts.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+  if (opts.includes(cur)) sel.value=cur;
+}
+
+/* ===== Aplanar evaluaciones con metadatos del inventario ===== */
+function flatten(invs, filter){
+  const out=[];
+  invs.forEach(inv=>{
+    inv.evals.forEach(ev=>{
+      const niv = nivelRiesgo(ev.hrn);
+      const row = { planta:inv.planta, area:inv.area, maquina:inv.maquina, evaluador:inv.evaluador, fecha:inv.fecha,
+        energia:ev.energia, criterio:ev.criterio, hallazgo:ev.hallazgo, recomendacion:ev.recomendacion,
+        calif:ev.calif, punto:ev.punto, metodo:ev.metodo, resp:ev.resp,
+        fe:ev.fe, po:ev.po, gs:ev.gs, np:ev.np, hrn:ev.hrn,
+        nivelKey: niv?niv.key:null, nivelTxt: niv?niv.txt:"" };
+      if (filter.planta && row.planta!==filter.planta) return;
+      if (filter.area && row.area!==filter.area) return;
+      if (filter.energia && row.energia!==filter.energia) return;
+      if (filter.nivel && row.nivelKey!==filter.nivel) return;
+      out.push(row);
+    });
+  });
+  return out;
+}
+
+/* ===== Render principal ===== */
+function render(){
+  const has = inventories.length>0;
+  document.getElementById('emptyState').style.display = has?'none':'';
+  document.getElementById('board').classList.toggle('hidden', !has);
+  document.getElementById('loadInfo').textContent = has
+    ? `${inventories.length} inventario(s) · ${flatten(inventories,{}).length} evaluación(es) en memoria.`
+    : "Sin inventarios cargados.";
+  if (!has) return;
+
+  const rows = flatten(inventories, F);
+
+  // KPIs
+  const plantas = new Set(rows.map(r=>r.planta));
+  const equipos = new Set(rows.map(r=>r.planta+'|'+r.maquina));
+  const cal = rows.filter(r=>r.calif==='C'||r.calif==='NC');
+  const cump = cal.length ? Math.round(rows.filter(r=>r.calif==='C').length / cal.length * 100) : 0;
+  const nc = rows.filter(r=>r.calif==='NC').length;
+  const altoInac = rows.filter(r=>r.nivelKey==='alto'||r.nivelKey==='inac').length;
+  set('kPlantas',plantas.size); set('kEquipos',equipos.size); set('kEval',rows.length);
+  set('kCump',cump+'%'); set('kNC',nc); set('kInac',altoInac);
+
+  // Vista 1: niveles
+  const lv = {ins:0,bajo:0,alto:0,inac:0};
+  rows.forEach(r=>{ if(r.nivelKey) lv[r.nivelKey]++; });
+  set('rIns',lv.ins); set('rBajo',lv.bajo); set('rAlto',lv.alto); set('rInac',lv.inac);
+  donut('chartRiesgo', ['Insignificante','Bajo/Signif.','Alto','Inaceptable'],
+        [lv.ins,lv.bajo,lv.alto,lv.inac], ['#16a34a','#facc15','#f97316','#dc2626']);
+
+  // Top equipos por HRN máx
+  const byEquipo = {};
+  rows.forEach(r=>{ if(r.hrn==null) return; const k=r.planta+'§'+r.maquina;
+    if(!byEquipo[k]||r.hrn>byEquipo[k].hrn) byEquipo[k]={planta:r.planta,maquina:r.maquina,energia:r.energia,hrn:r.hrn}; });
+  const top = Object.values(byEquipo).sort((a,b)=>b.hrn-a.hrn).slice(0,10);
+  const tb = document.getElementById('tblTop'); tb.innerHTML="";
+  top.forEach(t=>{ const n=nivelRiesgo(t.hrn); const tr=document.createElement('tr'); tr.className="border-b border-slate-100";
+    tr.innerHTML = `<td class="py-1 pr-2">${esc(t.planta)}</td><td class="py-1 pr-2">${esc(t.maquina)}</td>
+      <td class="py-1 pr-2">${esc(t.energia)}</td><td class="py-1 pr-2 text-right font-bold">${t.hrn}</td>
+      <td class="py-1 pl-2"><span class="px-2 py-0.5 rounded text-[11px] font-bold" style="background:${n.bg};color:${n.fg}">${n.txt}</span></td>`;
+    tb.appendChild(tr); });
+  if(!top.length) tb.innerHTML = `<tr><td colspan="5" class="py-3 text-center text-slate-400">Sin valoraciones HRN.</td></tr>`;
+
+  // Vista 2: cumplimiento por energía y por planta (stacked)
+  stackedCalif('chartCumpEnergia','Por energía', groupCalif(rows,'energia'));
+  stackedCalif('chartCumpPlanta','Por planta',  groupCalif(rows,'planta'));
+
+  // Vista 3: hallazgos por energía
+  const byEn = {};
+  rows.forEach(r=>{ const k=r.energia||'(Sin energía)'; byEn[k]=(byEn[k]||0)+1; });
+  const enLabels = Object.keys(byEn).sort((a,b)=>byEn[b]-byEn[a]);
+  bar('chartEnergia', enLabels, enLabels.map(k=>byEn[k]),
+      enLabels.map(k=>ENERGY_COLORS[k]||'#64748b'), 'Hallazgos');
+
+  // Vista 4: plan de acción
+  renderPlan(rows);
+}
+
+function groupCalif(rows, key){
+  const g={};
+  rows.forEach(r=>{ const k=r[key]||'(N/D)'; g[k]=g[k]||{C:0,NC:0,NA:0}; if(r.calif==='C'||r.calif==='NC'||r.calif==='NA') g[k][r.calif]++; });
+  return g;
+}
+
+function renderPlan(rows){
+  const only = document.getElementById('onlyNC').checked;
+  let list = rows.filter(r=> only ? r.calif==='NC' : (r.calif==='NC' || r.nivelKey==='alto' || r.nivelKey==='inac'));
+  // ordenar por riesgo desc
+  const order={inac:4,alto:3,bajo:2,ins:1,null:0};
+  list.sort((a,b)=>(order[b.nivelKey]||0)-(order[a.nivelKey]||0) || (b.hrn||0)-(a.hrn||0));
+  const tb = document.getElementById('tblPlan'); tb.innerHTML="";
+  document.getElementById('planEmpty').classList.toggle('hidden', list.length>0);
+  list.forEach(r=>{
+    const n = r.nivelKey?nivelRiesgo(r.hrn):null;
+    const badge = n?`<span class="px-2 py-0.5 rounded text-[10px] font-bold" style="background:${n.bg};color:${n.fg}">${n.txt}</span>`:'<span class="text-slate-400">—</span>';
+    const tr=document.createElement('tr'); tr.className="border-b border-slate-100 align-top";
+    tr.innerHTML = `<td class="py-1 pr-2">${esc(r.planta)}</td><td class="py-1 pr-2">${esc(r.area)}</td>
+      <td class="py-1 pr-2">${esc(r.maquina)}</td><td class="py-1 pr-2 whitespace-nowrap">${esc(r.energia)}</td>
+      <td class="py-1 pr-2">${esc(r.hallazgo)}</td><td class="py-1 pr-2 text-slate-600">${esc(r.recomendacion)}</td>
+      <td class="py-1 pr-2">${badge}</td><td class="py-1 pr-2">${esc(r.punto)}</td><td class="py-1 pr-2">${esc(r.resp)}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* ===== Charts (Chart.js) ===== */
+function destroy(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
+function donut(id, labels, data, colors){
+  if(typeof Chart==='undefined') return; destroy(id);
+  charts[id]=new Chart(document.getElementById(id),{type:'doughnut',
+    data:{labels,datasets:[{data,backgroundColor:colors,borderWidth:1,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}}}});
+}
+function bar(id, labels, data, colors, label){
+  if(typeof Chart==='undefined') return; destroy(id);
+  charts[id]=new Chart(document.getElementById(id),{type:'bar',
+    data:{labels,datasets:[{label,data,backgroundColor:colors,borderColor:'#0003',borderWidth:1}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{font:{size:10},maxRotation:45,minRotation:0}},y:{beginAtZero:true,ticks:{precision:0}}}}});
+}
+function stackedCalif(id, title, grouped){
+  if(typeof Chart==='undefined') return; destroy(id);
+  const labels=Object.keys(grouped);
+  const ds=[
+    {label:'Cumple',data:labels.map(l=>grouped[l].C),backgroundColor:'#16a34a'},
+    {label:'No Cumple',data:labels.map(l=>grouped[l].NC),backgroundColor:'#dc2626'},
+    {label:'No Aplica',data:labels.map(l=>grouped[l].NA),backgroundColor:'#9ca3af'}
+  ];
+  charts[id]=new Chart(document.getElementById(id),{type:'bar',
+    data:{labels,datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:title,font:{size:12}},legend:{position:'bottom',labels:{boxWidth:12,font:{size:10}}}},
+      scales:{x:{stacked:true,ticks:{font:{size:10},maxRotation:45}},y:{stacked:true,beginAtZero:true,ticks:{precision:0}}}}});
+}
+
+/* ===== Export Excel consolidado: rellena la PLANTILLA corporativa (conserva formato) ===== */
+const CAL_LABEL = { C:'CUMPLE', NC:'NO CUMPLE', NA:'NO APLICA' };
+const ENERGY_ICON = {"ELÉCTRICA":"⚡","NEUMÁTICA":"💭","MECÁNICA":"🛠️","HIDRÁULICA (ACEITE)":"💦",
+  "HIDRÁULICA (AGUA)":"💧","TÉRMICA":"🌡️","VAPOR":"♨️","GAS NATURAL":"🔥","QUÍMICO":"🧪"};
+const HRN_FE=[["Constante",5],["Diariamente",4],["Semanalmente",2.5],["Mensualmente",1.5],["Semestralmente",1],["Anualmente",0.5]];
+const HRN_PO=[["Certeza",15],["Muy probable",10],["Probable",8],["Cualquier oportunidad",5],["Posible",2],["Altamente improbable",1],["Casi imposible",0.033]];
+const HRN_GS=[["Fatalidad",15],["Enfermedad permanente",12],["Accidente grave",10],["Lesiones incapacitantes permanente",8],["Lesiones incapacitantes temporales",4],["Lesión severa",2],["Lesión leve",1],["Desgarro/corte",0.5],["Rasguño",0.1]];
+const HRN_NP=[[">50",12],["16-50",8],["8-15",4],["3-7",2],["1-2",1]];
+function hrnLabel(arr,v){ if(v==null) return ''; const f=arr.find(x=>x[1]===v); return f?f[0]:v; }
+function enLabel(e){ return e ? (e+' '+(ENERGY_ICON[e]||'')).trim() : ''; }
+
+async function exportExcel(){
+  const btn=document.getElementById('btnExcel'); const old=btn?btn.textContent:'';
+  if(btn){ btn.textContent='⏳ Generando…'; btn.disabled=true; }
+  try{
+    if(typeof ExcelJS==='undefined') throw new Error('La librería ExcelJS no cargó.');
+    const rows = flatten(inventories, F);
+    if(!rows.length) throw new Error('No hay evaluaciones para exportar con los filtros actuales.');
+    const resp = await fetch('plantilla.xlsx');
+    if(!resp.ok) throw new Error('No se encontró plantilla.xlsx (HTTP '+resp.status+').');
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await resp.arrayBuffer());
+    const inv = wb.getWorksheet('1. INVENTARIO LOTOTO'); const hrn = wb.getWorksheet('2. HRN ');
+    if(!inv||!hrn) throw new Error('La plantilla no contiene las hojas esperadas.');
+
+    // Cabecera HRN: planta = filtro activo o "(Consolidado)"
+    const plantas=[...new Set(rows.map(r=>r.planta))];
+    hrn.getCell('D5').value = F.planta || (plantas.length===1?plantas[0]:'(Consolidado · '+plantas.length+' plantas)');
+    hrn.getCell('D6').value = F.area || '';
+    hrn.getCell('H5').value = new Date().toISOString().slice(0,10);
+    hrn.getCell('H6').value = [...new Set(rows.map(r=>r.evaluador).filter(Boolean))].join(', ');
+
+    // Limpiar filas de ejemplo (más amplio para consolidado)
+    const MAXCLR = Math.max(82, 8+rows.length+2);
+    for(let r=9;r<=MAXCLR;r++) for(let c=7;c<=28;c++){ if(c===24) continue; inv.getCell(r,c).value=null; }
+    const MAXCLR2 = Math.max(32, 9+rows.length+2);
+    for(let r=10;r<=MAXCLR2;r++) for(let c=2;c<=24;c++){ hrn.getCell(r,c).value=null; }
+
+    rows.forEach((r,i)=>{
+      const en=enLabel(r.energia); const niv=r.nivelTxt||'';
+      const equipo=(r.planta?r.planta+' · ':'')+r.maquina;  // conserva planta en consolidado
+      const ir=9+i;
+      inv.getCell(ir,7).value=i+1; inv.getCell(ir,8).value=equipo; inv.getCell(ir,10).value=en;
+      inv.getCell(ir,12).value=r.criterio||''; inv.getCell(ir,13).value=CAL_LABEL[r.calif]||'';
+      inv.getCell(ir,14).value=r.punto||''; inv.getCell(ir,15).value=r.hallazgo||'';
+      inv.getCell(ir,17).value=r.recomendacion||''; inv.getCell(ir,18).value=r.area||'';
+      inv.getCell(ir,23).value=r.metodo||''; inv.getCell(ir,25).value=r.resp||'';
+      const hr=10+i;
+      hrn.getCell(hr,2).value=i+1; hrn.getCell(hr,3).value=equipo+' — '+en; hrn.getCell(hr,7).value=r.hallazgo||'';
+      hrn.getCell(hr,9).value=hrnLabel(HRN_FE,r.fe); hrn.getCell(hr,10).value=r.fe;
+      hrn.getCell(hr,11).value=hrnLabel(HRN_PO,r.po); hrn.getCell(hr,12).value=r.po;
+      hrn.getCell(hr,13).value=hrnLabel(HRN_GS,r.gs); hrn.getCell(hr,14).value=r.gs;
+      hrn.getCell(hr,15).value=hrnLabel(HRN_NP,r.np); hrn.getCell(hr,16).value=r.np;
+      hrn.getCell(hr,17).value=r.hrn; hrn.getCell(hr,18).value=niv;
+      hrn.getCell(hr,20).value=r.recomendacion||''; hrn.getCell(hr,21).value=r.resp||'';
+    });
+
+    const out=await wb.xlsx.writeBuffer();
+    const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download=`Inventario_Consolidado_${new Date().toISOString().slice(0,10)}.xlsx`; a.click();
+    URL.revokeObjectURL(url);
+    flash('Excel (plantilla) generado ✓');
+  }catch(e){
+    alert('No se pudo generar el Excel: '+e.message+
+      '\n\nNota: el Excel usa tu plantilla, por lo que el dashboard debe abrirse desde un servidor web (GitHub Pages), no con doble clic (file://).');
+  }finally{ if(btn){ btn.textContent=old; btn.disabled=false; } }
+}
+
+/* ===== Utilidades ===== */
+function set(id,v){ document.getElementById(id).textContent=v; }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+let flashT=null;
+function flash(msg){ const i=document.getElementById('loadInfo'); i.textContent=msg; i.classList.add('text-emerald-600','font-semibold');
+  clearTimeout(flashT); flashT=setTimeout(()=>{ i.classList.remove('text-emerald-600','font-semibold'); render(); },2200); }
+
+function clearAll(){
+  if(!confirm("Esto elimina todos los inventarios cargados en este navegador. ¿Continuar?")) return;
+  inventories=[]; saveStore(); buildFilters(); render();
+}
+
+/* ===== Init ===== */
+function init(){
+  loadStore(); buildFilters(); render();
+
+  const pick=document.getElementById('filePick'); const dz=document.getElementById('dropzone');
+  dz.addEventListener('click',()=>pick.click());
+  pick.addEventListener('change',e=>{ addFiles(e.target.files); pick.value=""; });
+  ['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag');}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag');}));
+  dz.addEventListener('drop',e=>{ if(e.dataTransfer.files) addFiles(e.dataTransfer.files); });
+
+  document.getElementById('fPlanta').addEventListener('change',e=>{F.planta=e.target.value;render();});
+  document.getElementById('fArea').addEventListener('change',e=>{F.area=e.target.value;render();});
+  document.getElementById('fEnergia').addEventListener('change',e=>{F.energia=e.target.value;render();});
+  document.getElementById('fNivel').addEventListener('change',e=>{F.nivel=e.target.value;render();});
+  document.getElementById('onlyNC').addEventListener('change',()=>render());
+  document.getElementById('btnExportJson').addEventListener('click',exportConsolidatedJSON);
+  document.getElementById('btnExcel').addEventListener('click',exportExcel);
+  document.getElementById('btnPrint').addEventListener('click',()=>window.print());
+  document.getElementById('btnClear').addEventListener('click',clearAll);
+}
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>

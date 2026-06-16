@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="theme-color" content="#0f172a">
+<title>Inventario de Energías Peligrosas · LOTO / HRN</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  :root { -webkit-tap-highlight-color: transparent; }
+  html { scroll-behavior: smooth; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  /* Inputs cómodos para dedos en planta */
+  select, input[type="text"], input[type="date"], textarea {
+    font-size: 16px; /* evita zoom en iOS */
+  }
+  .seg-btn { transition: all .12s ease; }
+  .seg-btn.active-c  { background:#16a34a; color:#fff; }
+  .seg-btn.active-nc { background:#dc2626; color:#fff; }
+  .seg-btn.active-na { background:#6b7280; color:#fff; }
+  /* Animación tarjeta nueva */
+  @keyframes pop { from { opacity:0; transform:translateY(8px) scale(.98);} to {opacity:1; transform:none;} }
+  .card-pop { animation: pop .2s ease; }
+
+  /* ====== REPORTE / PDF ====== */
+  #printReport { display:none; }
+  #printReport, #printReport * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @media print {
+    @page { size: A4; margin: 12mm; }
+    header, main, .no-print { display: none !important; }
+    body { background:#fff !important; }
+    #printReport { display:block !important; color:#0f172a; font-size:11px; }
+
+    .rep-head { text-align:center; border-bottom:3px solid #0f172a; padding-bottom:8px; margin-bottom:12px; }
+    .rep-title { font-size:20px; font-weight:800; letter-spacing:.5px; }
+    .rep-sub { font-size:11px; color:#475569; }
+    .rep-code { font-size:9px; color:#64748b; margin-top:2px; }
+    .rep-gen { width:100%; border-collapse:collapse; margin-bottom:10px; }
+    .rep-gen th, .rep-gen td { border:1px solid #cbd5e1; padding:4px 6px; text-align:left; font-size:11px; }
+    .rep-gen th { background:#f1f5f9; width:14%; font-weight:700; }
+    .rep-foto { text-align:center; margin-bottom:12px; }
+    .rep-foto img { max-height:180px; max-width:60%; border:1px solid #cbd5e1; border-radius:6px; }
+
+    .ficha { border:1px solid #cbd5e1; border-radius:8px; overflow:hidden; margin-bottom:10px; page-break-inside:avoid; break-inside:avoid; }
+    .ficha-head { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; font-weight:800; font-size:12px; }
+    .ficha-body { width:100%; border-collapse:collapse; }
+    .ficha-body th, .ficha-body td { border-top:1px solid #e2e8f0; padding:4px 8px; text-align:left; vertical-align:top; }
+    .ficha-body th { background:#f8fafc; width:16%; font-weight:700; color:#334155; }
+    .ficha-hrn { display:flex; align-items:center; gap:12px; padding:6px 10px; background:#f8fafc; border-top:1px solid #e2e8f0; }
+    .hrn-params { font-family:monospace; font-size:10px; color:#475569; }
+    .hrn-res { font-size:13px; } .hrn-res b { font-size:16px; }
+    .hrn-badge { margin-left:auto; padding:3px 10px; border-radius:6px; font-weight:800; font-size:11px; }
+    .ficha-foto { text-align:center; padding:6px; } .ficha-foto img { max-height:150px; max-width:55%; border:1px solid #cbd5e1; border-radius:4px; }
+    .rep-foot { margin-top:14px; text-align:center; font-size:9px; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:6px; }
+  }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900 min-h-screen">
+
+<!-- ===== HEADER ===== -->
+<header class="no-print sticky top-0 z-30 bg-slate-900 text-white shadow-lg">
+  <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+    <div class="flex items-center gap-2 min-w-0">
+      <span class="text-2xl">🔒</span>
+      <div class="min-w-0">
+        <h1 class="text-base font-bold leading-tight truncate">Inventario de Energías Peligrosas</h1>
+        <p class="text-[11px] text-slate-300 leading-tight">LOTO · Valoración HRN · Fichas en campo</p>
+      </div>
+    </div>
+    <div class="flex flex-col items-end gap-1">
+      <a href="dashboard.html" class="no-print text-[11px] bg-white/10 hover:bg-white/20 rounded-lg px-2.5 py-1.5 whitespace-nowrap">📊 Dashboard</a>
+      <div id="saveStatus" class="text-[11px] text-slate-400 whitespace-nowrap">Guardado ✓</div>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-3xl mx-auto px-3 sm:px-4 pb-40 pt-4">
+
+  <!-- ===== DATOS GENERALES ===== -->
+  <section class="print-block bg-white rounded-2xl shadow-sm p-4 mb-4">
+    <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3 flex items-center gap-2">
+      <span class="inline-flex w-6 h-6 rounded-full bg-slate-800 text-white items-center justify-center text-xs">1</span>
+      Datos Generales
+    </h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <label class="block">
+        <span class="text-xs font-semibold text-slate-500">Planta</span>
+        <input id="g_planta" type="text" placeholder="Ej. Planta Norte" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:ring-2 focus:ring-slate-800 focus:border-slate-800 outline-none">
+      </label>
+      <label class="block">
+        <span class="text-xs font-semibold text-slate-500">Área</span>
+        <input id="g_area" type="text" placeholder="Ej. Envasado" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:ring-2 focus:ring-slate-800 focus:border-slate-800 outline-none">
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="text-xs font-semibold text-slate-500">Nombre de la Máquina / Equipo</span>
+        <input id="g_maquina" type="text" placeholder="Ej. Llenadora rotativa LR-200" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:ring-2 focus:ring-slate-800 focus:border-slate-800 outline-none">
+      </label>
+      <label class="block">
+        <span class="text-xs font-semibold text-slate-500">Evaluado por</span>
+        <input id="g_evaluador" type="text" placeholder="Nombre del inspector" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:ring-2 focus:ring-slate-800 focus:border-slate-800 outline-none">
+      </label>
+      <label class="block">
+        <span class="text-xs font-semibold text-slate-500">Fecha</span>
+        <input id="g_fecha" type="date" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:ring-2 focus:ring-slate-800 focus:border-slate-800 outline-none">
+      </label>
+
+      <!-- Foto del equipo -->
+      <div class="sm:col-span-2">
+        <span class="text-xs font-semibold text-slate-500">Foto del Equipo</span>
+        <div class="mt-1 flex items-center gap-3">
+          <label class="no-print cursor-pointer inline-flex items-center gap-2 bg-slate-800 text-white text-sm font-semibold rounded-xl px-4 py-2.5 active:scale-95 transition">
+            📷 Tomar / Cargar foto
+            <input id="g_foto" type="file" accept="image/*" capture="environment" class="hidden">
+          </label>
+          <div id="g_thumbwrap" class="hidden relative">
+            <img id="g_thumb" class="thumb h-20 w-20 object-cover rounded-lg border border-slate-300" alt="equipo">
+            <button type="button" id="g_delphoto" class="no-print absolute -top-2 -right-2 bg-red-600 text-white w-5 h-5 rounded-full text-xs flex items-center justify-center">✕</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== RESUMEN ===== -->
+  <section class="no-print grid grid-cols-3 gap-2 mb-4">
+    <div class="bg-white rounded-xl shadow-sm p-3 text-center">
+      <div id="kpiTotal" class="text-2xl font-bold text-slate-800">0</div>
+      <div class="text-[10px] uppercase font-semibold text-slate-400">Evaluaciones</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-3 text-center">
+      <div id="kpiNC" class="text-2xl font-bold text-red-600">0</div>
+      <div class="text-[10px] uppercase font-semibold text-slate-400">No Cumple</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-3 text-center">
+      <div id="kpiCrit" class="text-2xl font-bold text-orange-600">0</div>
+      <div class="text-[10px] uppercase font-semibold text-slate-400">Riesgo Alto+</div>
+    </div>
+  </section>
+
+  <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-2 px-1 flex items-center gap-2">
+    <span class="inline-flex w-6 h-6 rounded-full bg-slate-800 text-white items-center justify-center text-xs no-print">2</span>
+    Inventario LOTO
+  </h2>
+
+  <!-- ===== CONTENEDOR DE EVALUACIONES ===== -->
+  <div id="cards" class="space-y-4"></div>
+
+  <!-- Estado vacío -->
+  <div id="emptyState" class="no-print text-center text-slate-400 py-10">
+    <div class="text-5xl mb-2">⚡🛠️💧</div>
+    <p class="text-sm">No hay evaluaciones todavía.</p>
+    <p class="text-xs">Pulsa <b>“Agregar Energía”</b> para iniciar el levantamiento.</p>
+  </div>
+
+</main>
+
+<!-- ===== REPORTE IMPRIMIBLE (PDF) ===== -->
+<div id="printReport"></div>
+
+<!-- ===== BARRA DE ACCIONES FIJA ===== -->
+<div class="no-print fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200">
+  <div class="max-w-3xl mx-auto px-3 py-2.5 space-y-2">
+    <div class="grid grid-cols-2 gap-2">
+      <button id="btnAdd" class="bg-slate-900 text-white font-semibold rounded-xl py-3 active:scale-95 transition flex items-center justify-center gap-2">
+        <span class="text-lg">＋</span> Agregar Energía
+      </button>
+      <button id="btnSave" class="bg-indigo-600 text-white font-semibold rounded-xl py-3 active:scale-95 transition flex items-center justify-center gap-2">💾 Guardar cambios</button>
+    </div>
+    <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
+      <button id="btnImport" class="bg-amber-500 text-white font-semibold rounded-xl py-2.5 active:scale-95 transition flex items-center justify-center gap-1 text-sm">📂 Cargar JSON</button>
+      <button id="btnExcel" class="bg-green-700 text-white font-semibold rounded-xl py-2.5 active:scale-95 transition flex items-center justify-center gap-1 text-sm">📊 Excel</button>
+      <button id="btnJson" class="bg-emerald-600 text-white font-semibold rounded-xl py-2.5 active:scale-95 transition flex items-center justify-center gap-1 text-sm">⬇️ JSON</button>
+      <button id="btnPrint" class="bg-blue-600 text-white font-semibold rounded-xl py-2.5 active:scale-95 transition flex items-center justify-center gap-1 text-sm">🖨️ PDF</button>
+      <button id="btnClear" class="bg-slate-200 text-slate-700 font-semibold rounded-xl py-2.5 active:scale-95 transition flex items-center justify-center gap-1 text-sm">🗑️ Limpiar</button>
+    </div>
+  </div>
+  <input id="fileImport" type="file" accept="application/json,.json" class="hidden">
+</div>
+
+<!-- Toast -->
+<div id="toast" class="no-print fixed bottom-28 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-full shadow-lg opacity-0 pointer-events-none transition-opacity"></div>
+
+<!-- ===== TEMPLATE DE TARJETA ===== -->
+<template id="cardTpl">
+  <section class="card print-block card-pop bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-200">
+    <!-- Cabecera de energía -->
+    <div class="energy-head flex items-center justify-between px-4 py-3" data-head>
+      <div class="flex items-center gap-2 font-bold" data-head-label>
+        <span class="text-xl" data-head-icon>⚙️</span>
+        <span data-head-text>Seleccione energía</span>
+      </div>
+      <button class="no-print text-sm opacity-80 hover:opacity-100 w-7 h-7 rounded-full bg-black/20 flex items-center justify-center" data-remove title="Eliminar">✕</button>
+    </div>
+
+    <div class="p-4 space-y-3">
+      <!-- Tipo de energía -->
+      <label class="block">
+        <span class="text-xs font-semibold text-slate-500">Tipo de Energía</span>
+        <select data-energy class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 bg-white"></select>
+      </label>
+
+      <!-- Criterio (concatenado) -->
+      <label class="block">
+        <span class="text-xs font-semibold text-slate-500">Criterio a Evaluar</span>
+        <select data-criterio class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 bg-white" disabled></select>
+      </label>
+
+      <!-- Hallazgo (concatenado) -->
+      <label class="block">
+        <span class="text-xs font-semibold text-slate-500">Hallazgo / Estado</span>
+        <select data-hallazgo class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 bg-white" disabled></select>
+      </label>
+
+      <!-- Recomendación (auto) -->
+      <label class="block">
+        <span class="text-xs font-semibold text-slate-500">Recomendación</span>
+        <textarea data-reco rows="3" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 bg-amber-50 text-sm" placeholder="Se autocompleta según el hallazgo (editable)"></textarea>
+      </label>
+
+      <!-- Calificación -->
+      <div>
+        <span class="text-xs font-semibold text-slate-500">Calificación</span>
+        <div class="mt-1 grid grid-cols-3 gap-2" data-calif>
+          <button type="button" data-cal="C"  class="seg-btn rounded-xl py-2.5 font-bold border border-slate-300 text-slate-600">Cumple</button>
+          <button type="button" data-cal="NC" class="seg-btn rounded-xl py-2.5 font-bold border border-slate-300 text-slate-600">No Cumple</button>
+          <button type="button" data-cal="NA" class="seg-btn rounded-xl py-2.5 font-bold border border-slate-300 text-slate-600">No Aplica</button>
+        </div>
+      </div>
+
+      <!-- Campos LOTO -->
+      <div class="grid grid-cols-1 gap-3 pt-1">
+        <label class="block">
+          <span class="text-xs font-semibold text-slate-500">Punto de Aislamiento / Cierre</span>
+          <input data-punto type="text" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" placeholder="Ej. Breaker QF1 tablero TP-3">
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-500">Método de Bloqueo</span>
+            <input data-metodo type="text" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" placeholder="Candado + tarjeta">
+          </label>
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-500">Responsable</span>
+            <input data-resp type="text" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" placeholder="Nombre">
+          </label>
+        </div>
+      </div>
+
+      <!-- Foto -->
+      <div>
+        <span class="text-xs font-semibold text-slate-500">Evidencia Fotográfica</span>
+        <div class="mt-1 flex items-center gap-3">
+          <label class="no-print cursor-pointer inline-flex items-center gap-2 bg-slate-800 text-white text-sm font-semibold rounded-xl px-4 py-2.5 active:scale-95 transition">
+            📷 Tomar / Cargar
+            <input data-photo type="file" accept="image/*" capture="environment" class="hidden">
+          </label>
+          <div data-thumbwrap class="hidden relative">
+            <img data-thumb class="thumb h-16 w-16 object-cover rounded-lg border border-slate-300" alt="evidencia">
+            <button type="button" data-delphoto class="no-print absolute -top-2 -right-2 bg-red-600 text-white w-5 h-5 rounded-full text-xs flex items-center justify-center">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== HRN ===== -->
+      <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 mt-2">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-slate-600 uppercase tracking-wide">Valoración HRN</span>
+          <span data-hrnval class="text-xs font-mono text-slate-400">HRN = —</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block">
+            <span class="text-[11px] font-semibold text-slate-500">Frecuencia Exposición (FE)</span>
+            <select data-fe class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"></select>
+          </label>
+          <label class="block">
+            <span class="text-[11px] font-semibold text-slate-500">Probabilidad (PO)</span>
+            <select data-po class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"></select>
+          </label>
+          <label class="block">
+            <span class="text-[11px] font-semibold text-slate-500">Gravedad del Daño (GS)</span>
+            <select data-gs class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"></select>
+          </label>
+          <label class="block">
+            <span class="text-[11px] font-semibold text-slate-500">N° de Personas (NP)</span>
+            <select data-np class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"></select>
+          </label>
+        </div>
+        <div class="mt-3 flex items-center justify-between gap-2">
+          <div>
+            <div class="text-[11px] text-slate-500 font-semibold">Resultado HRN</div>
+            <div data-hrnnum class="text-3xl font-extrabold text-slate-800 leading-none">0</div>
+          </div>
+          <div data-badge class="badge text-right px-3 py-2 rounded-xl font-bold text-sm bg-slate-200 text-slate-500">Sin valorar</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</template>
+
+<script>
+/* ============================================================
+   MATRIZ LOTOTO — Energía → Criterio → [{hallazgo, reco}]
+   Texto fiel a la matriz estándar suministrada.
+   ============================================================ */
+const ENERGIES = {
+  "ELÉCTRICA": { color:"#FF0000", text:"#FFFFFF", icon:"⚡" },
+  "NEUMÁTICA": { color:"#00B0F0", text:"#FFFFFF", icon:"💭" },
+  "MECÁNICA": { color:"#FFC000", text:"#000000", icon:"🛠️" },
+  "HIDRÁULICA (ACEITE)": { color:"#833C0C", text:"#FFFFFF", icon:"💦" },
+  "HIDRÁULICA (AGUA)": { color:"#00B050", text:"#FFFFFF", icon:"💧" },
+  "TÉRMICA": { color:"#7030A0", text:"#FFFFFF", icon:"🌡️" },
+  "VAPOR": { color:"#A6A6A6", text:"#FFFFFF", icon:"♨️" },
+  "GAS NATURAL": { color:"#FFFF00", text:"#000000", icon:"🔥" },
+  "QUÍMICO": { color:"#16A085", text:"#FFFFFF", icon:"🧪" }
+};
+
+const MATRIX = {
+  "ELÉCTRICA": {
+    "Totalizador externo autocandadeable": [
+      ["El tablero eléctrico cuenta con totalizador externo autocandadeable","Se recomienda en el tablero eléctrico, realizar revisiónes periodicas del totalizador externo autocandadeable para garantizar su optimo funcionamiento"],
+      ["El tablero eléctrico no cuenta con totalizador externo autocandadeable","Se recomienda dotar el tablero eléctrico con totalizador externo autocandadeable"],
+      ["El totalizador externo se encuentra deshabilitado","Se recomienda dotar el tablero eléctrico con totalizador externo autocandadeable"]
+    ],
+    "Totalizador externo en buen estado": [
+      ["El totalizador externo se encuentra en buen estado","Se recomienda en el tablero eléctrico, realizar revisiónes periodicas del totalizador para garantizar su optimo funcionamiento"],
+      ["El totalizador externo se encuentra dañado","Se recomienda realizar mantenimiento / cambio del totalizador que se encuentra dañado"]
+    ],
+    "Totalizador en buen estado": [
+      ["El totalizador se encuentra en buen estado","Se recomienda en el tablero eléctrico, realizar revisiónes periodicas del totalizador para garantizar su optimo funcionamiento"],
+      ["El totalizador se encuentra dañado","Se recomienda realizar mantenimiento / cambio del totalizador que se encuentra dañado"]
+    ],
+    "Identificación de las protecciones eléctricas": [
+      ["La protección eléctrica se encuentra identificada y marcada","Se recomienda mantener las protección eléctricas identificadas y marcadas"],
+      ["La protección eléctrica no se encuentra identificada y marcada","Se recomienda la identificación y marcadación de las protecciones eléctricas"]
+    ],
+    "Partes peligrosas protegidas": [
+      ["La identificación del circuito no es clara presenta inconsistencias","Se recomienda identificar el circuito de forma clara y que no presente inconsistencias"],
+      ["El armario se encuentra conectado el sistema de puesta a tierra (Puente puerta y armario)","Se recomienda mantener el armario conectado el sistema de puesta a tierra (Puente puerta y armario)"],
+      ["El armario no se encuentra aterrizado adecuadamente","Se recomienda aterrizar el armario adecuadamente"]
+    ],
+    "El tablero eléctrico cuenta con la señalización de riesgo eléctrico": [
+      ["Se cuenta con el pictograma de riesgo eléctrico","Se recomienda que el símbolo de riesgo eléctrico utilizado en señalización de seguridad, conserve las proporciones de las dimensiones según la Tabla 1.3.3.2. a. Proporciones en las dimensiones del símbolo de riesgo eléctrico definido en el Libro 1, Titulo 3, Artículo 1.3.3.2. Símbolo de riesgo eléctrico - Resolución 40117 de 2024 - RETIE"],
+      ["El sistema eléctrico no cuenta con el pictograma de riesgo eléctrico","Se recomienda tomar como base las normas IEC 60617, NTC 1461, ISO 80416-1, ANSI Z535 e ISO 3864 para instalar / cambiar / mejorar, la señalización de seguridad, dado que son de obligatoria aplicación, por parte del PROPIETARIO del sistema e instalación - Libro 1, Titulo 3, Artículo 1.3.3. Señalización de seguridad - Resolución 40117 de 2024 - RETIE"]
+    ]
+  },
+  "NEUMÁTICA": {
+    "Accesibilidad de la válvula principal de cierre de la maquina": [
+      ["La válvula de cierre es accesible al usuario","Se recomienda mantener la válvula de cierre accesible al usuario"],
+      ["La válvula de cierre no es accesible al usuario","Se recomienda acondicionar la válvula de cierre y que sea accesible al usuario"]
+    ],
+    "Válvula de cierre con seguro y con posibilidad de instalar candados": [
+      ["Las válvulas de cierre permiten la aplicación de candados y etiquetas, las valvulas son autocandadeables.","Se recomienda mantener las condiciones para que las válvulas de cierre sigan permitiendo la aplicación de candados y etiquetas"],
+      ["Las válvulas de cierre no permiten la aplicación de candados y etiquetas, las válvulas no son autocandadeables.","Se recomienda disponer / instalar de válvulas autocandadeables"]
+    ],
+    "Se encuentra identificada la tubería indicando el fluido transportado y la presión de operación": [
+      ["La tuberia se encuentra identificada adecuadamente","Se recomienda mantener la tuberia identificada adecuadamente y clasificarla deacuerdo a la norma ANSI / ASME A13. 1-2007"],
+      ["La tuberia no se encuentra identificada adecuadamente","Se recomienda identificar la tuberia adecuadamente según clasificación de fluidos norma ANSI / ASME A13. 1-2007"]
+    ],
+    "Unidad reguladora de presión accesible al usuario y es autocandadeable": [
+      ["Se cuenta con una unidad reguladora de presión","Se recomienda realizar revisión y mantenimiento periodico a la unidad reguladora de presión"],
+      ["No se cuenta con una unidad reguladora de presión","Se recomienda instalar una unidad reguladora de presión autocandadeable en el sistema de alimentación neumático"],
+      ["La unidad reguladora de presión es accesible al usuario","Se recomienda mantener la unidad reguladora de presión es accesible al usuario"],
+      ["La unidad reguladora de presión no es accesible al usuario","Se recomienda instalar la unidad reguladora de presión accesible sobre el plano de trabajo, que no lo obligue a realizar movimientos por fuera de los angulos de confort o realizar tareas de alto riesgo cómo trabajos en altura (Res 4272 de 2021 Trabajo en alturas > 2 m)."],
+      ["La unidad reguladora de presión permite la aplicación de bloqueo y etiquetado","Se recomienda mantener las condiciones de orde y aseo en el área para la aplicación de bloqueo y etiquetado"],
+      ["La unidad reguladora de presión no permite la instalación de candados y etiqueta","Se recomienda instalar unidad reguladora de presión que permita la instalación de candados y etiqueta"]
+    ],
+    "El manómetro se encuentra en buen estado": [
+      ["El manómetro esta en buen estado","Se recomienda en las rutinas de mantenimiento, incluir la revisión o mantenimiento de sistema criticos de control como manómetro para garantizar su confiabilidad y optimo estado de operación"],
+      ["El manómetro esta deteriorado","Se recomienda en las rutinas de mantenimiento, incluir la revisión o mantenimiento de sistema criticos de control como manómetro para garantizar su confiabilidad y optimo estado de operación"]
+    ],
+    "Presencia de fugas en el sistema neumático": [
+      ["Presencia de fugas en el sistema","Se recomienda dar mantenimiento a tuberías y mangueras para evitar fugas en el sistema"],
+      ["No se evidencia fugas en el sistema","Se recomienda en las rutinas de mantenimiento, incluir la revisión y/o mantenimiento de tuberías y mangueras para evitar fugas en el sistema"]
+    ]
+  },
+  "MECÁNICA": {
+    "Las zonas peligrosas de la maquina se encuentran protegidas con guardas de seguridad": [
+      ["Las guardas implementadas protegen completamente los puntos de atrapamiento","Se recomienda realizar un inventario de guardas y barreras, códificarlas e incluirlas en el programa de inspecciones planeadas del SG-SST, garantizar que las guardas implementadas protegen completamente los puntos de atrapamiento / corte / pellizco / amputación"],
+      ["Las guardas de seguridad no cubren completamente los puntos de atrapamiento","Se recomienda instalar un sistema de guardas y barreras que cubran completamente los puntos de atrapamiento / corte / pellizco / amputación"],
+      ["Las guardas de seguridad se encuentran en mal estado","Se recomienda realziar mantenimiento preventivo o correctivo a las guardas de seguridad que se encuentran en mal estado"],
+      ["No se cuenta con guardas de seguridad","Se recomienda instalar un sistema de guardas y barreras que cubran completamente los puntos de atrapamiento / corte / pellizco / amputación"]
+    ],
+    "Los micros de seguridad de la maquina se encuentra en buen estado": [
+      ["Los micros están en buen estado y se encuentran operativos","Se recomienda incluir los micros de seguridad en la revisión o mantenimiento de sistema criticos de control para garantizar su confiabilidad y optimo estado de operación"],
+      ["Los micros de seguridad están deshabilitados","Se recomienda habilitar e incluir los micros de seguridad en la revisión o mantenimiento de sistema criticos de control para garantizar su confiabilidad y optimo estado de operación"],
+      ["No se cuenta con micros de seguridad en el equipo","Se recomienda instalar e incluir los micros de seguridad en la revisión o mantenimiento de sistema criticos de control para garantizar su confiabilidad y optimo estado de operación"]
+    ],
+    "Se cuenta con paradas de emergencia y se encuentran en buen estado": [
+      ["Se cuenta con paros de emergencia ubicados estratégicamente.","Se recomienda incluir los paros de emergencia ubicados estratégicamente en la revisión o mantenimiento de sistema criticos de control, para garantizar su confiabilidad y optimo estado de operación"],
+      ["No se cuenta con paros de emergencia","Se recomienda instalar e incluir los paros de emergencia en la revisión o mantenimiento de sistema criticos de control para garantizar su confiabilidad y optimo estado de operación"],
+      ["Los paros de emergencia se encuentran deteriorados.","Se recomienda realziar mantenimiento preventivo o correctivo a los paros de emergencia se encuentran deteriorados"]
+    ],
+    "Las partes peligrosas de la maquina cuentan con señalización de riesgo mecánico.": [
+      ["Se cuenta con señalización de riesgo mecánico","Se recomienda tomar como base las normas ANSI Z535 e ISO 3864 para instalar / cambiar / mejorar, la señalización de seguridad para riesgo mecánico"],
+      ["No se cuenta con señalización de riesgo mecánico","Se recomienda tomar como base las normas ANSI Z535 e ISO 3864 para instalar / cambiar / mejorar, la señalización de seguridad para riesgo mecánico"]
+    ]
+  },
+  "HIDRÁULICA (ACEITE)": {
+    "El sistema presenta fugas": [
+      ["Presencia de fugas en el sistema","Se recomienda dar mantenimiento a tuberías y mangueras para evitar fugas en el sistema"],
+      ["No se evidencia fugas en el sistema","Se recomienda en las rutinas de mantenimiento, incluir la revisión y/o mantenimiento de tuberías y mangueras para evitar fugas en el sistema"]
+    ],
+    "El manómetro indicador de presión se encuentra en buen estado y esta calibrado": [
+      ["El manómetro esta en buen estado","Se recomienda en las rutinas de mantenimiento, incluir la revisión o mantenimiento de sistema criticos de control como manómetro para garantizar su confiabilidad y optimo estado de operación"],
+      ["El manómetro esta deteriorado","Se recomienda en las rutinas de mantenimiento, incluir la revisión o mantenimiento de sistema criticos de control como manómetro para garantizar su confiabilidad y optimo estado de operación"]
+    ],
+    "Las mangueras se encuentran debidamente aseguradas": [
+      ["Las mangueras del sistema hidráulico se encuentran aseguradas adecuadamente.","Se recomienda revisón periodica de las mangueras del sistema hidráulico y que las mismas se encuentran mecánicamnet estables"],
+      ["Las mangueras del sistema hidráulico no se encuentran aseguradas.","Se recomienda que las mangueras del sistema hidráulico esten mecánicamnet estables, asegurdas firmemente a estructuras"]
+    ],
+    "Los mecanismos de purga del sistema se encuentran en buen estado": [
+      ["Los mecanismos de purga se encuentran en buen estado","Se recomienda en las rutinas de mantenimiento, incluir la revisión y/o mantenimiento de los mecanismos de purga se encuentran en buen estado"],
+      ["No se cuentan con mecanismos de purga","Se recomienda si no es un sistema electrohidráulico contar con mecanismos de purga"],
+      ["No se requieren mecanismos de purga ya que el sistema es electrohidráulico","Realizar mantenimiento preventivo y correctivo al sistema es electrohidráulico"]
+    ]
+  },
+  "HIDRÁULICA (AGUA)": {
+    "Accesibilidad de las redes hidráulicas": [
+      ["El sistema es accesible al usuario","Se recomienda mantener la válvula de cierre accesible al usuario"],
+      ["El sistema de cierre no es accesible al usuario","Se recomienda acondicionar la válvula de cierre y que sea accesible al usuario"]
+    ],
+    "Válvulas de cierre autocandadeables": [
+      ["Las válvulas de cierre permiten la aplicación de candados y etiquetas son autocandadeables.","Se recomienda mantener las condiciones para que las válvulas de cierre sigan permitiendo la aplicación de candados y etiquetas"],
+      ["Las válvulas de cierre no permiten la aplicación de candados y etiquetas, las válvulas no son autocandadeables.","Se recomienda disponer / instalar de válvulas autocandadeables"]
+    ],
+    "Código de colores para tubería aplicado, identificación de las tuberías (agua de proceso, agua caliente, etc.)": [
+      ["El sistema presenta una adecuada aplicación del código de colores","Se recomienda mantener la tuberia identificada adecuadamente y clasificarla deacuerdo a la norma ANSI / ASME A13. 1-2007"],
+      ["No se encuentra aplicado el código de colores o esta implementado parcialmente","Se recomienda identificar la tuberia adecuadamente según clasificación de fluidos norma ANSI / ASME A13. 1-2007"],
+      ["En las tuberías se identifican claramente el fluido transportado","Se recomienda mantener la tuberia identificada adecuadamente y clasificarla deacuerdo a la norma ANSI / ASME A13. 1-2007"],
+      ["En las tuberías no se tiene identificado claramente el fluido transportado","Se recomienda identificar la tuberia adecuadamente según clasificación de fluidos norma ANSI / ASME A13. 1-2007"]
+    ],
+    "Punto de desconexión principal identificado": [
+      ["Punto de desconexión identificado adecuadamente","Se recomienda en el punto de desconexión señalizar su modo normal de operación normalmente abierto / cerrado"],
+      ["No se identifica el punto de desconexión de la energía","Se recomienda identifica el punto de desconexión del sistema"]
+    ],
+    "Fugas en el sistema": [
+      ["Presencia de fugas en el sistema","Se recomienda dar mantenimiento a tuberías y mangueras para evitar fugas en el sistema"],
+      ["No se evidencia fugas en el sistema","Se recomienda en las rutinas de mantenimiento, incluir la revisión y/o mantenimiento de tuberías y mangueras para evitar fugas en el sistema"]
+    ]
+  },
+  "TÉRMICA": {
+    "Las superficies calientes están protegidas (guardas, barreras)": [
+      ["Las superficies calientes no se encuentran debidamente protegidas","Se recomienda proteger o aislar las superficies calientes que tengan potencial de quemar a las personas"],
+      ["Las superficies calientes se encuentran debidamente protegidas","Se recomienda dar mantenimiento y revisión periodica a los aislamientos o barreras implementados en las superficies calientes se encuentran protegidas"]
+    ],
+    "Las superficies calientes se encuentran señalizadas e identificadas": [
+      ["Las superficies calientes no cuentan con mecanismos de identificación y señalización","Se recomienda Las superficies calientes NO cuentan con mecanismos de identificación y señalización"],
+      ["Las superficies calientes se encuentran identificadas y señalizadas","Se recomienda tomar como base las normas ANSI Z535 e ISO 3864 para instalar / cambiar / mejorar, la señalización de seguridad para superficies calientes"]
+    ],
+    "Las superficies calientes cuentan con aislamiento térmico": [
+      ["Se cuenta con mecanismos de aislamiento térmico en el sistema","Se recomienda dar mantenimiento y revisión periodica a los aislamientos o barreras implementados en las superficies calientes se encuentran protegidas"],
+      ["El sistema carece de mecanismos de aislamiento térmico","Se recomienda instalar mecanismos de aislamiento térmico"]
+    ]
+  },
+  "VAPOR": {
+    "La tubería cuenta con aislamiento térmico en todos sus tramos": [
+      ["La tubería cuenta con aislamiento térmico en buen estado en todos sus tramos","Se recomienda dar mantenimiento y revisión periodica a los aislamientos o barreras implementados en las superficies calientes se encuentran protegidas"],
+      ["La tubería cuenta con daños en el aislamiento térmico","Se recomienda instalar mecanismos de aislamiento térmico"],
+      ["Se evidencian tramos de tubería sin aislamiento térmico","Se recomienda instalar mecanismos de aislamiento térmico"]
+    ],
+    "Señalización de alta presión y superficies calientes": [
+      ["El sistema se encuentra señalizado con alta presión y superficies calientes","Se recomienda tomar como base las normas ANSI Z535 e ISO 3864 para instalar / cambiar / mejorar, la señalización de seguridad para superficies calientes"],
+      ["El sistema no se encuentra señalizado","Se recomienda tomar como base las normas ANSI Z535 e ISO 3864 para instalar / cambiar / mejorar, la señalización de seguridad para superficies calientes"]
+    ],
+    "Identificada la tubería indicando el sentido del flujo y la presión de operación": [
+      ["No se identifica el sentido de flujo y la presión de operación","Se recomienda tomar como base las normas ANSI Z535 e ISO 3864 para instalar / cambiar / mejorar, la señalización de seguridad para superficies calientes"],
+      ["La presión de operación y el sentido de flujo se encuentra identificada y señalizada adecuadamente","Se recomienda tomar como base las normas ANSI Z535 e ISO 3864 para instalar / cambiar / mejorar, la señalización de seguridad para superficies calientes"]
+    ],
+    "El sistema presenta fugas": [
+      ["El sistema no presenta fugas de vapor","Se recomienda en las rutinas de mantenimiento, incluir la revisión y/o mantenimiento de tuberías y mangueras para evitar fugas en el sistema"],
+      ["El sistema presenta fugas de vapor","Se recomienda dar mantenimiento a tuberías y mangueras para evitar fugas en el sistema"]
+    ]
+  },
+  "GAS NATURAL": {
+    "Identificada la tubería mediante código de colores indicando el fluido transportado": [
+      ["La tubería no se encuentra identificada adecuadamente","Se recomienda tomar como base las normas ANSI Z535 e ISO 3864 para instalar / cambiar / mejorar, la señalización de seguridad"],
+      ["La tubería se encuentra identificada adecuadamente","Se recomienda tomar como base las normas ANSI Z535 e ISO 3864 para instalar / cambiar / mejorar, la señalización de seguridad"]
+    ],
+    "Accesibilidad de la válvula principal de cierre de la maquina": [
+      ["La válvula de cierre no es accesible al usuario","Se recomienda instalar válvulas accesible sobre el plano de trabajo, que no lo obligue a realizar movimientos por fuera de los angulos de confort o realizar tareas de alto riesgo cómo trabajos en altura (Res 4272 de 2021 Trabajo en alturas > 2 m)."],
+      ["La válvula de cierre es accesible al usuario","Se recomienda mantener válvula accesible al usuario"]
+    ],
+    "El sistema presenta fugas": [
+      ["El sistema no presenta fugas","Se recomienda en las rutinas de mantenimiento, incluir la revisión y/o mantenimiento de tuberías y mangueras para evitar fugas en el sistema"],
+      ["El sistema presenta fugas","Se recomienda dar mantenimiento a tuberías y mangueras para evitar fugas en el sistema"]
+    ]
+  },
+  "QUÍMICO": {
+    "Identificación del químico": [
+      ["El químico NO se encuentra claramente identificado","Se recomienda realizar la identificación del químico"]
+    ],
+    "Evaluación del Riesgo": [
+      ["El químico cuenta con evaluación de riesgo","Se recomienda mantener las evaluación del riesgo del químico"],
+      ["El químico NO cuenta con evaluación de riesgo","Se recomienda realizar la evaluación del riesgo del químico"]
+    ]
+  }
+};
+
+/* ====== Parámetros HRN (valores exactos) ====== */
+const HRN = {
+  FE: [["Constante",5],["Diariamente",4],["Semanalmente",2.5],["Mensualmente",1.5],["Semestralmente",1],["Anualmente",0.5]],
+  PO: [["Certeza",15],["Muy probable",10],["Probable",8],["Cualquier oportunidad",5],["Posible",2],["Altamente improbable",1],["Casi imposible",0.033]],
+  GS: [["Fatalidad",15],["Enfermedad permanente",12],["Accidente grave",10],["Lesiones incapacitantes permanente",8],["Lesiones incapacitantes temporales",4],["Lesión severa",2],["Lesión leve",1],["Desgarro/corte",0.5],["Rasguño",0.1]],
+  NP: [[">50",12],["16-50",8],["8-15",4],["3-7",2],["1-2",1]]
+};
+
+function nivelRiesgo(h){
+  if (h <= 0) return null;
+  if (h <= 5)   return { txt:"Insignificante",            bg:"#16a34a", fg:"#fff" };
+  if (h <= 50)  return { txt:"Bajo, pero significativo",  bg:"#facc15", fg:"#000" };
+  if (h <= 500) return { txt:"Alto",                       bg:"#f97316", fg:"#fff" };
+  return                { txt:"Inaceptable",               bg:"#dc2626", fg:"#fff" };
+}
+
+/* ============================================================
+   ESTADO + PERSISTENCIA
+   ============================================================ */
+const LS_KEY = "inventario_energias_peligrosas_v1";
+let state = { general:{}, items:[] };
+let saveTimer = null;
+
+function uid(){ return 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function loadState(){
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) state = JSON.parse(raw);
+  } catch(e){ console.warn("No se pudo cargar:", e); }
+  if (!state.general) state.general = {};
+  if (!Array.isArray(state.items)) state.items = [];
+}
+
+function saveState(){
+  clearTimeout(saveTimer);
+  document.getElementById('saveStatus').textContent = "Guardando…";
+  saveTimer = setTimeout(()=>{
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(state));
+      const t = new Date();
+      document.getElementById('saveStatus').textContent =
+        "Guardado " + t.toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'}) + " ✓";
+    } catch(e){
+      document.getElementById('saveStatus').textContent = "⚠️ Sin espacio";
+      console.error(e);
+    }
+  }, 300);
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+const cardsEl = document.getElementById('cards');
+const tpl = document.getElementById('cardTpl');
+
+function fillSelect(sel, options, placeholder, valueAsText){
+  sel.innerHTML = "";
+  const o0 = document.createElement('option');
+  o0.value = ""; o0.textContent = placeholder; sel.appendChild(o0);
+  options.forEach(opt=>{
+    const o = document.createElement('option');
+    if (valueAsText){ o.value = opt; o.textContent = opt; }
+    else { o.value = String(opt[1]); o.textContent = `${opt[0]} (${opt[1]})`; }
+    sel.appendChild(o);
+  });
+}
+
+function renderCard(item){
+  const node = tpl.content.firstElementChild.cloneNode(true);
+  node.dataset.id = item.id;
+
+  const $ = s => node.querySelector(s);
+  const energySel  = $('[data-energy]');
+  const critSel    = $('[data-criterio]');
+  const hallSel    = $('[data-hallazgo]');
+  const reco       = $('[data-reco]');
+
+  // Energía
+  fillSelect(energySel, Object.keys(ENERGIES), "Seleccione energía…", true);
+  energySel.value = item.energy || "";
+
+  // Parámetros HRN
+  fillSelect($('[data-fe]'), HRN.FE, "FE…");
+  fillSelect($('[data-po]'), HRN.PO, "PO…");
+  fillSelect($('[data-gs]'), HRN.GS, "GS…");
+  fillSelect($('[data-np]'), HRN.NP, "NP…");
+  if (item.fe!=null) $('[data-fe]').value = item.fe;
+  if (item.po!=null) $('[data-po]').value = item.po;
+  if (item.gs!=null) $('[data-gs]').value = item.gs;
+  if (item.np!=null) $('[data-np]').value = item.np;
+
+  // Concatenados según energía guardada
+  refreshCriterios(node, item, true);
+
+  // Campos de texto
+  $('[data-punto]').value  = item.punto  || "";
+  $('[data-metodo]').value = item.metodo || "";
+  $('[data-resp]').value   = item.resp   || "";
+  reco.value = item.reco || "";
+
+  // Calificación
+  setCalif(node, item.calif);
+
+  // Foto
+  if (item.photo){ showThumb(node, item.photo); }
+
+  // Cabecera energía
+  paintHead(node, item.energy);
+
+  // HRN inicial
+  recalcHRN(node, item, false);
+
+  // ===== Listeners =====
+  energySel.addEventListener('change', ()=>{
+    item.energy = energySel.value;
+    item.criterio = ""; item.hallazgo = ""; item.reco = "";
+    reco.value = "";
+    paintHead(node, item.energy);
+    refreshCriterios(node, item, false);
+    refreshHallazgos(node, item, false);
+    saveState();
+  });
+
+  critSel.addEventListener('change', ()=>{
+    item.criterio = critSel.value;
+    item.hallazgo = ""; item.reco = ""; reco.value = "";
+    refreshHallazgos(node, item, false);
+    saveState();
+  });
+
+  hallSel.addEventListener('change', ()=>{
+    item.hallazgo = hallSel.value;
+    const list = (MATRIX[item.energy] && MATRIX[item.energy][item.criterio]) || [];
+    const found = list.find(h=>h[0]===item.hallazgo);
+    item.reco = found ? found[1] : "";
+    reco.value = item.reco;
+    saveState();
+  });
+
+  reco.addEventListener('input', ()=>{ item.reco = reco.value; saveState(); });
+
+  $('[data-punto]').addEventListener('input', e=>{ item.punto = e.target.value; saveState(); });
+  $('[data-metodo]').addEventListener('input', e=>{ item.metodo = e.target.value; saveState(); });
+  $('[data-resp]').addEventListener('input', e=>{ item.resp = e.target.value; saveState(); });
+
+  // Calificación
+  node.querySelectorAll('[data-cal]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      item.calif = (item.calif === btn.dataset.cal) ? "" : btn.dataset.cal;
+      setCalif(node, item.calif);
+      updateKPIs();
+      saveState();
+    });
+  });
+
+  // HRN
+  ['data-fe','data-po','data-gs','data-np'].forEach(sel=>{
+    $('['+sel+']').addEventListener('change', e=>{
+      const key = sel.split('-')[1];
+      item[key] = e.target.value === "" ? null : parseFloat(e.target.value);
+      recalcHRN(node, item, true);
+      updateKPIs();
+      saveState();
+    });
+  });
+
+  // Foto
+  $('[data-photo]').addEventListener('change', e=>{
+    const file = e.target.files[0];
+    if (!file) return;
+    compressImage(file, 1024, 0.7).then(dataUrl=>{
+      item.photo = dataUrl;
+      showThumb(node, dataUrl);
+      saveState();
+    });
+  });
+  $('[data-delphoto]').addEventListener('click', ()=>{
+    item.photo = null;
+    node.querySelector('[data-thumbwrap]').classList.add('hidden');
+    node.querySelector('[data-photo]').value = "";
+    saveState();
+  });
+
+  // Eliminar tarjeta
+  $('[data-remove]').addEventListener('click', ()=>{
+    if (!confirm("¿Eliminar esta evaluación?")) return;
+    state.items = state.items.filter(it=>it.id!==item.id);
+    node.remove();
+    updateEmpty(); updateKPIs(); saveState();
+  });
+
+  cardsEl.appendChild(node);
+}
+
+function paintHead(node, energy){
+  const head = node.querySelector('[data-head]');
+  const icon = node.querySelector('[data-head-icon]');
+  const text = node.querySelector('[data-head-text]');
+  const label= node.querySelector('[data-head-label]');
+  if (energy && ENERGIES[energy]){
+    const e = ENERGIES[energy];
+    head.style.background = e.color;
+    label.style.color = e.text;
+    node.querySelector('[data-remove]').style.color = e.text;
+    icon.textContent = e.icon;
+    text.textContent = energy;
+  } else {
+    head.style.background = "#e2e8f0";
+    label.style.color = "#475569";
+    icon.textContent = "⚙️";
+    text.textContent = "Seleccione energía";
+  }
+}
+
+function refreshCriterios(node, item, isInit){
+  const critSel = node.querySelector('[data-criterio]');
+  const crits = item.energy && MATRIX[item.energy] ? Object.keys(MATRIX[item.energy]) : [];
+  fillSelect(critSel, crits, "Seleccione criterio…", true);
+  critSel.disabled = crits.length === 0;
+  if (isInit && item.criterio) critSel.value = item.criterio;
+}
+
+function refreshHallazgos(node, item, isInit){
+  const hallSel = node.querySelector('[data-hallazgo]');
+  const list = (item.energy && item.criterio && MATRIX[item.energy] && MATRIX[item.energy][item.criterio]) || [];
+  fillSelect(hallSel, list.map(h=>h[0]), "Seleccione hallazgo…", true);
+  hallSel.disabled = list.length === 0;
+  if (isInit && item.hallazgo) hallSel.value = item.hallazgo;
+}
+
+function setCalif(node, val){
+  node.querySelectorAll('[data-cal]').forEach(b=>{
+    b.classList.remove('active-c','active-nc','active-na');
+    b.classList.add('border','border-slate-300','text-slate-600');
+    if (b.dataset.cal === val){
+      b.classList.remove('text-slate-600');
+      if (val==='C')  b.classList.add('active-c');
+      if (val==='NC') b.classList.add('active-nc');
+      if (val==='NA') b.classList.add('active-na');
+    }
+  });
+}
+
+function recalcHRN(node, item, animate){
+  const fe = item.fe, po = item.po, gs = item.gs, np = item.np;
+  const numEl = node.querySelector('[data-hrnnum]');
+  const valEl = node.querySelector('[data-hrnval]');
+  const badge = node.querySelector('[data-badge]');
+  if ([fe,po,gs,np].some(v => v==null || isNaN(v))){
+    numEl.textContent = "0";
+    valEl.textContent = "HRN = —";
+    badge.textContent = "Sin valorar";
+    badge.style.background = "#e2e8f0"; badge.style.color = "#64748b";
+    item.hrn = null;
+    return;
+  }
+  const h = +(fe*po*gs*np).toFixed(2);
+  item.hrn = h;
+  numEl.textContent = (h % 1 === 0) ? h.toString() : h.toFixed(2);
+  valEl.textContent = `HRN = ${fe} × ${po} × ${gs} × ${np}`;
+  const nv = nivelRiesgo(h);
+  badge.textContent = nv.txt;
+  badge.style.background = nv.bg; badge.style.color = nv.fg;
+  if (animate){
+    numEl.animate([{transform:'scale(1.18)'},{transform:'scale(1)'}], {duration:180});
+  }
+}
+
+/* ====== Imagen: comprimir antes de guardar en LocalStorage ====== */
+function compressImage(file, maxDim, quality){
+  return new Promise(resolve=>{
+    const reader = new FileReader();
+    reader.onload = ev=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let {width, height} = img;
+        if (width > height && width > maxDim){ height = height*maxDim/width; width = maxDim; }
+        else if (height > maxDim){ width = width*maxDim/height; height = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function showThumb(node, dataUrl){
+  const wrap = node.querySelector('[data-thumbwrap]');
+  node.querySelector('[data-thumb]').src = dataUrl;
+  wrap.classList.remove('hidden');
+}
+
+/* ============================================================
+   KPIs / ESTADO VACÍO
+   ============================================================ */
+function updateKPIs(){
+  document.getElementById('kpiTotal').textContent = state.items.length;
+  document.getElementById('kpiNC').textContent = state.items.filter(i=>i.calif==='NC').length;
+  document.getElementById('kpiCrit').textContent = state.items.filter(i=>i.hrn!=null && i.hrn>50).length;
+}
+function updateEmpty(){
+  document.getElementById('emptyState').style.display = state.items.length ? 'none' : '';
+}
+
+/* ============================================================
+   DATOS GENERALES
+   ============================================================ */
+const genFields = ['planta','area','maquina','evaluador','fecha'];
+function bindGeneral(){
+  genFields.forEach(f=>{
+    const el = document.getElementById('g_'+f);
+    if (state.general[f]!=null) el.value = state.general[f];
+    el.addEventListener('input', ()=>{ state.general[f] = el.value; saveState(); });
+  });
+  if (!state.general.fecha){
+    const today = new Date().toISOString().slice(0,10);
+    document.getElementById('g_fecha').value = today;
+    state.general.fecha = today;
+  }
+  // Foto del equipo
+  const fotoInput = document.getElementById('g_foto');
+  fotoInput.addEventListener('change', e=>{
+    const file = e.target.files[0]; if(!file) return;
+    compressImage(file, 1280, 0.72).then(dataUrl=>{
+      state.general.equipoFoto = dataUrl;
+      showEquipoPhoto();
+      saveState();
+    });
+  });
+  document.getElementById('g_delphoto').addEventListener('click', ()=>{
+    state.general.equipoFoto = null;
+    document.getElementById('g_thumbwrap').classList.add('hidden');
+    fotoInput.value = "";
+    saveState();
+  });
+  showEquipoPhoto();
+}
+
+function showEquipoPhoto(){
+  const wrap = document.getElementById('g_thumbwrap');
+  if (state.general.equipoFoto){
+    document.getElementById('g_thumb').src = state.general.equipoFoto;
+    wrap.classList.remove('hidden');
+  } else {
+    wrap.classList.add('hidden');
+  }
+}
+
+/* ====== Toast ====== */
+let toastTimer=null;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ t.style.opacity='0'; }, 1800);
+}
+
+/* ====== Guardar cambios (explícito) ====== */
+function saveNow(){
+  try{
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+    const t = new Date();
+    document.getElementById('saveStatus').textContent =
+      "Guardado " + t.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'}) + " ✓";
+    toast("Cambios guardados ✓");
+  }catch(e){
+    alert("No se pudo guardar: " + e.message + "\n(Posible falta de espacio por fotos)");
+  }
+}
+
+/* ====== Re-render completo ====== */
+function renderAll(){
+  cardsEl.innerHTML = "";
+  genFields.forEach(f=>{ const el=document.getElementById('g_'+f); if(el) el.value = state.general[f]||""; });
+  showEquipoPhoto();
+  state.items.forEach(renderCard);
+  updateEmpty(); updateKPIs();
+}
+
+/* ====== Importar / cargar JSON ====== */
+function importJSON(file){
+  const reader = new FileReader();
+  reader.onload = e=>{
+    let data;
+    try { data = JSON.parse(e.target.result); }
+    catch(err){ alert("Archivo JSON inválido: " + err.message); return; }
+    let ns;
+    try {
+      if (Array.isArray(data.evaluaciones)){
+        // Formato exportado por la app
+        ns = { general: data.general || {}, items: data.evaluaciones.map(ev=>({
+          id: uid(),
+          energy: ev.energia || "", criterio: ev.criterio || "", hallazgo: ev.hallazgo || "",
+          reco: ev.recomendacion || "", calif: ev.calificacion || "",
+          punto: ev.puntoAislamiento || "", metodo: ev.metodoBloqueo || "", resp: ev.responsable || "",
+          photo: ev.foto || null,
+          fe: ev.hrn ? ev.hrn.FE : null, po: ev.hrn ? ev.hrn.PO : null,
+          gs: ev.hrn ? ev.hrn.GS : null, np: ev.hrn ? ev.hrn.NP : null,
+          hrn: ev.hrn ? ev.hrn.total : null
+        })) };
+      } else if (Array.isArray(data.items)){
+        // Snapshot directo del estado
+        ns = { general: data.general || {}, items: data.items.map(it=>({...it, id: it.id || uid()})) };
+      } else {
+        throw new Error("Estructura no reconocida");
+      }
+    } catch(err){ alert("No se pudo interpretar el JSON: " + err.message); return; }
+
+    if (state.items.length && !confirm("Esto reemplazará las evaluaciones actuales por las del archivo. ¿Continuar?")) return;
+    state = ns;
+    if (!state.general) state.general = {};
+    if (data.meta && data.meta.id) state.general.invId = data.meta.id;
+    if (!Array.isArray(state.items)) state.items = [];
+    renderAll();
+    saveNow();
+    toast(`Cargadas ${state.items.length} evaluaciones ✓`);
+  };
+  reader.readAsText(file);
+}
+
+/* ====== Exportar a Excel rellenando la PLANTILLA corporativa (conserva formato) ====== */
+const CAL_LABEL = { C:'CUMPLE', NC:'NO CUMPLE', NA:'NO APLICA' };
+function hrnLabel(arr, v){ if(v==null) return ''; const f = arr.find(x=>x[1]===v); return f ? f[0] : v; }
+
+async function exportExcel(){
+  const btn = document.getElementById('btnExcel'); const old = btn ? btn.textContent : '';
+  if (btn){ btn.textContent = '⏳ Generando…'; btn.disabled = true; }
+  try{
+    if (typeof ExcelJS === 'undefined') throw new Error('La librería ExcelJS no cargó (revisa tu conexión).');
+    const resp = await fetch('plantilla.xlsx');
+    if (!resp.ok) throw new Error('No se encontró plantilla.xlsx (HTTP ' + resp.status + ').');
+    const buf = await resp.arrayBuffer();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const inv = wb.getWorksheet('1. INVENTARIO LOTOTO');
+    const hrn = wb.getWorksheet('2. HRN ');
+    if (!inv || !hrn) throw new Error('La plantilla no contiene las hojas esperadas.');
+    const g = state.general || {};
+
+    // Limpiar filas de ejemplo (sin tocar la columna X combinada ni la matriz A–D)
+    for (let r=9; r<=82; r++) for (let c=7; c<=28; c++){ if (c===24) continue; inv.getCell(r,c).value = null; }
+    for (let r=10; r<=32; r++) for (let c=2; c<=24; c++){ hrn.getCell(r,c).value = null; }
+
+    // Cabecera de datos generales (hoja HRN)
+    hrn.getCell('D5').value = g.planta || '';
+    hrn.getCell('D6').value = g.area || '';
+    hrn.getCell('H5').value = g.fecha || '';
+    hrn.getCell('H6').value = g.evaluador || '';
+
+    state.items.forEach((it,i)=>{
+      const en  = it.energy ? (it.energy + ' ' + ((ENERGIES[it.energy]||{}).icon || '')).trim() : '';
+      const niv = it.hrn!=null ? (nivelRiesgo(it.hrn)?.txt || '') : '';
+      // Hoja 1 · INVENTARIO LOTOTO (ficha)
+      const r = 9 + i;
+      inv.getCell(r,7).value  = i+1;                 // #
+      inv.getCell(r,8).value  = g.maquina || '';     // NOMBRE DEL EQUIPO
+      inv.getCell(r,10).value = en;                  // FUENTE DE ENERGÍA
+      inv.getCell(r,12).value = it.criterio || '';   // CRITERIO A EVALUAR
+      inv.getCell(r,13).value = CAL_LABEL[it.calif] || ''; // Calificación
+      inv.getCell(r,14).value = it.punto || '';      // PUNTO DE AISLAMIENTO
+      inv.getCell(r,15).value = it.hallazgo || '';   // OBSERVACIÓN
+      inv.getCell(r,17).value = it.reco || '';       // PLAN DE ACCIÓN
+      inv.getCell(r,18).value = g.area || '';        // UBICACIÓN
+      inv.getCell(r,23).value = it.metodo || '';     // MÉTODO DE BLOQUEO
+      inv.getCell(r,25).value = it.resp || '';       // RESPONSABLE
+      // Hoja 2 · HRN
+      const hr = 10 + i;
+      hrn.getCell(hr,2).value  = i+1;
+      hrn.getCell(hr,3).value  = en;                 // Origen del peligro
+      hrn.getCell(hr,7).value  = it.hallazgo || '';  // Escenario del accidente
+      hrn.getCell(hr,9).value  = hrnLabel(HRN.FE, it.fe); hrn.getCell(hr,10).value = it.fe;
+      hrn.getCell(hr,11).value = hrnLabel(HRN.PO, it.po); hrn.getCell(hr,12).value = it.po;
+      hrn.getCell(hr,13).value = hrnLabel(HRN.GS, it.gs); hrn.getCell(hr,14).value = it.gs;
+      hrn.getCell(hr,15).value = hrnLabel(HRN.NP, it.np); hrn.getCell(hr,16).value = it.np;
+      hrn.getCell(hr,17).value = it.hrn;             // HRN
+      hrn.getCell(hr,18).value = niv;                // NIVEL DE RIESGO
+      hrn.getCell(hr,20).value = it.reco || '';      // RECOMENDACIÓN
+      hrn.getCell(hr,21).value = it.resp || '';      // Responsable
+    });
+
+    const out = await wb.xlsx.writeBuffer();
+    const blob = new Blob([out], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    const m = (g.maquina || 'equipo').replace(/[^\w]+/g,'_').slice(0,30);
+    a.href = url; a.download = `Inventario_LOTO_${m}_${g.fecha||''}.xlsx`; a.click();
+    URL.revokeObjectURL(url);
+    toast('Excel (plantilla) generado ✓');
+  }catch(e){
+    alert('No se pudo generar el Excel: ' + e.message +
+      '\n\nNota: el Excel usa tu plantilla, por lo que la app debe abrirse desde un servidor web (GitHub Pages), no con doble clic (file://).');
+  }finally{ if (btn){ btn.textContent = old; btn.disabled = false; } }
+}
+
+/* ============================================================
+   ACCIONES
+   ============================================================ */
+function addItem(){
+  const item = { id:uid(), energy:"", criterio:"", hallazgo:"", reco:"",
+    calif:"", punto:"", metodo:"", resp:"", photo:null,
+    fe:null, po:null, gs:null, np:null, hrn:null };
+  state.items.push(item);
+  renderCard(item);
+  updateEmpty(); updateKPIs(); saveState();
+  // Scroll a la nueva tarjeta
+  setTimeout(()=>{ cardsEl.lastElementChild.scrollIntoView({behavior:'smooth', block:'center'}); }, 50);
+}
+
+function exportJSON(){
+  if (!state.general.invId) state.general.invId = uid() + uid();
+  const payload = {
+    meta: { app:"Inventario de Energías Peligrosas", version:1, id: state.general.invId, exportado: new Date().toISOString() },
+    general: state.general,
+    evaluaciones: state.items.map(i=>({
+      energia:i.energy, criterio:i.criterio, hallazgo:i.hallazgo, recomendacion:i.reco,
+      calificacion:i.calif, puntoAislamiento:i.punto, metodoBloqueo:i.metodo, responsable:i.resp,
+      hrn:{ FE:i.fe, PO:i.po, GS:i.gs, NP:i.np, total:i.hrn,
+            nivel: i.hrn!=null ? nivelRiesgo(i.hrn)?.txt : null },
+      tieneFoto: !!i.photo,
+      foto: i.photo || null
+    }))
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const m = (state.general.maquina||"equipo").replace(/[^\w]+/g,'_').slice(0,30);
+  a.href = url; a.download = `LOTO_${m}_${state.general.fecha||''}.json`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function clearAll(){
+  if (!confirm("Esto borra TODOS los datos guardados en este dispositivo. ¿Continuar?")) return;
+  localStorage.removeItem(LS_KEY);
+  state = { general:{}, items:[] };
+  cardsEl.innerHTML = "";
+  genFields.forEach(f=>{ const el=document.getElementById('g_'+f); if(el) el.value=""; });
+  bindGeneral();
+  updateEmpty(); updateKPIs(); saveState();
+}
+
+/* ============================================================
+   REPORTE IMPRIMIBLE (PDF)
+   ============================================================ */
+function escHtml(s){ return (s==null||s==='')?'—':String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+function buildPrintReport(){
+  const g = state.general || {};
+  let h = `<div class="rep-head">
+    <div class="rep-title">INVENTARIO DE ENERGÍAS PELIGROSAS</div>
+    <div class="rep-sub">Levantamiento LOTO · Valoración de Riesgos HRN</div>
+    <div class="rep-code">SIG-FT-755 · Documento asociado SIG-PG-063</div>
+  </div>`;
+  h += `<table class="rep-gen"><tbody>
+    <tr><th>Planta</th><td>${escHtml(g.planta)}</td><th>Área</th><td>${escHtml(g.area)}</td></tr>
+    <tr><th>Equipo</th><td>${escHtml(g.maquina)}</td><th>Fecha</th><td>${escHtml(g.fecha)}</td></tr>
+    <tr><th>Evaluado por</th><td>${escHtml(g.evaluador)}</td><th>Evaluaciones</th><td>${state.items.length}</td></tr>
+  </tbody></table>`;
+  if (g.equipoFoto) h += `<div class="rep-foto"><img src="${g.equipoFoto}"></div>`;
+
+  state.items.forEach((it,i)=>{
+    const e = ENERGIES[it.energy] || {color:'#e2e8f0', text:'#475569', icon:'⚙️'};
+    const niv = it.hrn!=null ? nivelRiesgo(it.hrn) : null;
+    const cal = CAL_LABEL[it.calif] || '—';
+    h += `<div class="ficha">
+      <div class="ficha-head" style="background:${e.color};color:${e.text}">
+        <span>${e.icon} ${escHtml(it.energy||'Sin energía')}</span>
+        <span>#${i+1} · ${cal}</span>
+      </div>
+      <table class="ficha-body"><tbody>
+        <tr><th>Criterio a evaluar</th><td colspan="3">${escHtml(it.criterio)}</td></tr>
+        <tr><th>Hallazgo / estado</th><td colspan="3">${escHtml(it.hallazgo)}</td></tr>
+        <tr><th>Recomendación</th><td colspan="3">${escHtml(it.reco)}</td></tr>
+        <tr><th>Punto de aislamiento</th><td>${escHtml(it.punto)}</td><th>Método de bloqueo</th><td>${escHtml(it.metodo)}</td></tr>
+        <tr><th>Responsable</th><td>${escHtml(it.resp)}</td><th>Calificación</th><td>${cal}</td></tr>
+      </tbody></table>
+      <div class="ficha-hrn">
+        <span class="hrn-params">FE ${it.fe??'—'} × PO ${it.po??'—'} × GS ${it.gs??'—'} × NP ${it.np??'—'}</span>
+        <span class="hrn-res">HRN = <b>${it.hrn??'—'}</b></span>
+        ${niv ? `<span class="hrn-badge" style="background:${niv.bg};color:${niv.fg}">${niv.txt}</span>`
+              : `<span class="hrn-badge" style="background:#e2e8f0;color:#64748b">Sin valorar</span>`}
+      </div>
+      ${it.photo ? `<div class="ficha-foto"><img src="${it.photo}"></div>` : ''}
+    </div>`;
+  });
+  h += `<div class="rep-foot">Generado el ${new Date().toLocaleString('es')} · Inventario de Energías Peligrosas</div>`;
+  document.getElementById('printReport').innerHTML = h;
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function init(){
+  loadState();
+  bindGeneral();
+  state.items.forEach(renderCard);
+  updateEmpty(); updateKPIs();
+
+  document.getElementById('btnAdd').addEventListener('click', addItem);
+  document.getElementById('btnSave').addEventListener('click', saveNow);
+  document.getElementById('btnJson').addEventListener('click', exportJSON);
+  document.getElementById('btnExcel').addEventListener('click', exportExcel);
+  document.getElementById('btnPrint').addEventListener('click', ()=>{ buildPrintReport(); setTimeout(()=>window.print(), 60); });
+  document.getElementById('btnClear').addEventListener('click', clearAll);
+
+  // Importar JSON
+  const fileImport = document.getElementById('fileImport');
+  document.getElementById('btnImport').addEventListener('click', ()=> fileImport.click());
+  fileImport.addEventListener('change', e=>{
+    const file = e.target.files[0];
+    if (file) importJSON(file);
+    fileImport.value = "";
+  });
+
+  if (!state.items.length) addItem(); // arranca con una tarjeta lista
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
