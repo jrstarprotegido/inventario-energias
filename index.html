@@ -926,6 +926,30 @@ function importJSON(file){
 const CAL_LABEL = { C:'CUMPLE', NC:'NO CUMPLE', NA:'NO APLICA' };
 function hrnLabel(arr, v){ if(v==null) return ''; const f = arr.find(x=>x[1]===v); return f ? f[0] : v; }
 
+/* ====== Imagen base64 → {base64, extension} para ExcelJS ====== */
+function dataUrlParts(d){
+  if (!d || typeof d !== 'string') return null;
+  const m = /^data:image\/([a-zA-Z0-9.+-]+);base64,(.*)$/.exec(d);
+  if (!m) return null;
+  let ext = m[1].toLowerCase();
+  if (ext === 'jpg') ext = 'jpeg';
+  if (!['jpeg','png','gif'].includes(ext)) ext = 'jpeg';
+  return { base64: m[2], extension: ext };
+}
+/* Inserta una foto en una celda (col/fila 1-based) ajustada a su tamaño */
+function addCellImage(wb, ws, dataUrl, col1, row1, w, h){
+  const p = dataUrlParts(dataUrl);
+  if (!p) return;
+  try{
+    const id = wb.addImage({ base64: p.base64, extension: p.extension });
+    ws.addImage(id, {
+      tl: { col: (col1-1) + 0.1, row: (row1-1) + 0.08 },
+      ext: { width: w, height: h },
+      editAs: 'oneCell'
+    });
+  }catch(err){ console.warn('No se pudo insertar imagen:', err); }
+}
+
 async function exportExcel(){
   const btn = document.getElementById('btnExcel'); const old = btn ? btn.textContent : '';
   if (btn){ btn.textContent = '⏳ Generando…'; btn.disabled = true; }
@@ -950,6 +974,11 @@ async function exportExcel(){
     hrn.getCell('D6').value = g.area || '';
     hrn.getCell('H5').value = g.fecha || '';
     hrn.getCell('H6').value = g.evaluador || '';
+
+    // Foto del equipo → Hoja 1 · columna I "FOTO EQUIPO" (en la primera fila de datos)
+    if (g.equipoFoto && state.items.length){
+      addCellImage(wb, inv, g.equipoFoto, 9, 9, 150, 200);
+    }
 
     state.items.forEach((it,i)=>{
       const en  = it.energy ? (it.energy + ' ' + ((ENERGIES[it.energy]||{}).icon || '')).trim() : '';
@@ -980,6 +1009,12 @@ async function exportExcel(){
       hrn.getCell(hr,18).value = niv;                // NIVEL DE RIESGO
       hrn.getCell(hr,20).value = it.reco || '';      // RECOMENDACIÓN
       hrn.getCell(hr,21).value = it.resp || '';      // Responsable
+
+      // Evidencia fotográfica de la evaluación
+      if (it.photo){
+        addCellImage(wb, inv, it.photo, 16, r, 140, 190);  // Hoja 1 · col P "REGISTRO FOTOGRÁFICO"
+        addCellImage(wb, hrn, it.photo, 4,  hr, 140, 175);  // Hoja 2 · col D "Registro Fotografico"
+      }
     });
 
     const out = await wb.xlsx.writeBuffer();
